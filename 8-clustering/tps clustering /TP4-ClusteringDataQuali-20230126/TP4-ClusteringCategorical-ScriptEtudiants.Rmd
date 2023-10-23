@@ -1,0 +1,436 @@
+---
+title: "TP Clustering"
+subtitle: "Partie 4 : Clustering de données qualitatives"
+date : "4modIA / 2022-2023"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth : 2
+    number_sections : true
+header-includes:
+  - \usepackage{comment}
+  - \usepackage{dsfont}
+params:
+  soln: TRUE   
+---
+
+```{css,echo=F}
+.badCode {
+background-color: #C9DDE4;
+}
+
+.corrO { background-color: rgb(255,238,237); }
+.corrS { background-color: pink; color: black; border: 1px solid red; }
+```
+
+```{r setup, echo=FALSE, cache=TRUE}
+library(knitr)
+## Global options
+options(max.print="75")
+opts_chunk$set(echo=TRUE,
+	             cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               class.source="badCode")
+opts_knit$set(width=75)
+```
+
+
+Pour ce TP, nous allons utiliser les librairies de R suivantes :
+
+```{r}
+library(reticulate)
+library(ggplot2)
+library(gridExtra)
+library(plotly)
+library(FactoMineR)
+library(factoextra)
+library(dplyr)
+library(klaR)
+library(reshape2)
+library(mclust)
+library(Rmixmod)
+library(cluster)
+```
+
+et les librairies de Python suivantes :
+
+```{python}
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import matplotlib.pyplot as plt
+
+import prince
+from kmodes.kmodes import KModes
+
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+
+from yellowbrick.cluster import SilhouetteVisualizer
+
+import gower
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import dendrogram, linkage
+from sklearn.cluster import AgglomerativeClustering
+
+from sklearn.metrics.cluster import adjusted_rand_score
+```
+
+
+L'objectif de ce TP est d'étudier quelques stratégies pour faire du clustering d'individus décrits par des variables qualitatives. 
+
+
+# Jeu de données et statistiques descriptives
+
+## Description des données mushroom
+
+Nous allons nous intéresser au jeu de données de champignons disponible sur le site de l'UCI : [mushroom](https://archive.ics.uci.edu/ml/datasets/mushroom). Pour limiter le temps de calcul et faciliter l'interprétation durant le TP, nous allons considérer que $800$ individus ($400$ de chaque classe) parmi les $8124$ disponibles et l'on se restreint aux variables suivantes : 
+
+\scriptsize
+- 0. Class: edible (e) or poisonous (p)
+- 1. odor: almond=a,anise=l,creosote=c,fishy=y,foul=f, musty=m,none=n,pungent=p,spicy=s
+- 2. gill-color: black=k,brown=n,buff=b,chocolate=h,gray=g, green=r,orange=o,pink=p,purple=u,red=e, white=w,yellow=y
+- 3. stalk-root: bulbous=b,club=c,cup=u,equal=e, rhizomorphs=z,rooted=r,missing=?
+- 4. stalk-color-above-ring: brown=n,buff=b,cinnamon=c,gray=g,orange=o, pink=p,red=e,white=w,yellow=y
+- 5. stalk-color-below-ring: brown=n,buff=b,cinnamon=c,gray=g,orange=o, pink=p,red=e,white=w,yellow=y
+- 6. ring-number: none=n,one=o,two=t
+- 7. ring-type: cobwebby=c,evanescent=e,flaring=f,large=l, none=n,pendant=p,sheathing=s,zone=z
+- 8. spore-print-color: black=k,brown=n,buff=b,chocolate=h,green=r, orange=o,purple=u,white=w,yellow=y
+- 9. population: abundant=a,clustered=c,numerous=n, scattered=s,several=v,solitary=y
+- 10. habitat: grasses=g,leaves=l,meadows=m,paths=p, urban=u,waste=w,woods=d
+
+\normalsize
+
+Dans la suite, on note la matrice des données $$\mathbf{X}=(x_{ij})_{\begin{array}{l}
+i=1,\ldots,n\\
+j=1,\ldots,p
+\end{array}}$$
+où $x_{ij}$ est la modalité prise par le $i$-ème individu pour la $j$-ème variable qualitative.  
+
+**Question :** Chargez le jeu de données disponible dans le fichier `mushroomTP.csv` déposé sur la page moodle du cours. Conservez à part la variable `Class`. 
+
+```{r,eval=F}
+Data <-read.table("mushroomTP.csv",sep = ',')
+Classep <- Data[,1]
+Classep
+Data <- Data[,-1]
+Data
+# jeu de données sans la variable Class
+```
+
+
+
+Afin de plus facilement repérer les variables et leur modalité, on modifie le jeu de données : 
+
+```{r,eval=F}
+for (j in 1:ncol(Data)){
+  if (j<10){
+    Data[,j]<-as.factor(paste("0",j,"-",Data[,j],sep=""))}
+  else{Data[,j]<-as.factor(paste(j,"-",Data[,j],sep=""))}
+}
+Data
+```
+
+**Question :** Vérifiez la taille du jeu de données et faites un `summary` pour contrôler le contenu du jeu de données `Data`.  
+
+```{r,eval=F}
+# A FAIRE
+```
+
+
+De même on lit le jeu de données sous Python : 
+
+```{python,eval=F}
+data_full = pd.read_csv('mushroomTP.csv')
+target = data_full[['class']]
+Datapy = data_full.drop(['class'],axis=1)
+```
+
+## Analyse des correspondances multiples
+
+**Question :** Faites une analyse des correspondances multiples avec R. Vous conserverez les coordonnées des projections des individus pour la suite du TP. 
+
+```{r,eval=F}
+library(FactoMineR)
+library(factoextra)
+resacm<-MCA(Data)
+fviz_screeplot(resacm, choice = "eigenvalue")
+fviz_mca(resacm)
+```
+
+
+**Question :** Faites également une analyse des correspondances multiples avec Python.
+
+```{python,eval=F}
+# A COMPLETER
+import prince 
+mca=prince.MCA(2)
+mca = mca.fit(Datapy)
+
+
+```
+
+
+## Ingrédients pour la suite
+
+On se munit également d'une fonction auxiliaire pour visualiser les résultats du clustering pour la suite. Cette fonction prend en argument un clustering `clust`, le jeu de données `Data` et un vecteur `J` contenant les indices des variables d'intérêt. Il renvoie la fréquence des modalités des variables choisies vis-à-vis des classes de `clust`. 
+
+```{r,eval=T}
+# J indice des noms de variables
+
+heatm<-function(clust,Data,J){
+  library(dplyr)
+  Dataaux<-data.frame(id.s=c(1:nrow(Data)),Data)
+  aux <- cbind(Dataaux, clust)
+  aux.long <- melt(data.frame(lapply(aux,as.character)),stringsAsFactors=FALSE, id = c("id.s", "clust"), factorsAsStrings=T)
+  # Effectifs
+  aux.long.q <- aux.long %>%
+    group_by(clust, variable, value) %>%
+    mutate(count = n_distinct(id.s)) %>%
+    distinct(clust, variable, value, count)
+  # avec fréquences
+  aux.long.p <- aux.long.q %>%
+    group_by(clust, variable) %>%
+    mutate(perc = count / sum(count)) %>%
+    arrange(clust)
+
+Lev<-NULL
+for (j in 1:ncol(Data))
+  Lev<-c(Lev,levels(Data[,j]))
+
+Jaux<-NULL
+for (j in 1:length(J)){
+  Jaux<-c(Jaux,which(aux.long.p$variable==colnames(Data)[J[j]]))
+}
+
+gaux<-ggplot(aux.long.p[Jaux,], aes(x = clust, y =value))+
+  geom_tile(aes(fill = perc))+
+  scale_fill_gradient2(low="white",mid = "blue", high = "red")+
+  theme_minimal()
+
+return(list(gaux=gaux,eff=aux.long.q,freq=aux.long.p))
+}
+
+Mode <- function(x){
+     ux <- unique(x)
+     ux[which.max(tabulate(match(x, ux)))]
+}
+
+barplotClus<-function(clust,Data,J){
+  aux.long.p<-heatm(clust,Data,J)$freq
+  #ux<-unique(aux.long.p$variable)
+  for(j in J){  
+       p <- ggplot(aux.long.p[which(aux.long.p$variable==colnames(Data)[j]),],aes(x=clust,y=perc,fill=value))+
+         geom_bar(stat="identity")
+         print(p)
+    } 
+  
+}  
+```
+
+
+# Méthode des Kmodes
+
+Dans cette partie, nous allons utiliser la méthode des Kmodes introduite par Huang (1998). Rappelons que cette méthode est une extension des Kmeans dans le cas des données qualitatives. Les modifications par rapport aux Kmeans sont 
+
+- le changement de distance : on utilise la dissimilarité basée sur l'appariement simple
+
+$$
+d(\mathbf{x}_i,\mathbf{x}_\ell) = \underset{j=1}{\stackrel{p}{\sum}}\ \mathbb{1}_{x_{ij}\neq x_{\ell j}}
+$$
+
+- le centre d'une classe est calculé en fonction des fréquences des modalités majoritaires présentes dans cette classe: pour la classe $\mathcal{C}_k$, 
+
+$$
+\mathbf{m}_k=(m_{k1},\ldots,m_{kp}) \textrm{ avec } m_{kj}= \underset{u_1,\ldots,u_{s_j}}{\mbox{argmax}}\ \underset{i\in\mathcal C_k}{\sum}\ \mathbb{1}_{x_{ij}= u_{s_j}}
+$$
+
+**Question : ** A l'aide de la fonction `kmodes()`de la librairie `klaR`, déterminez une classification en $K=6$ classes des champignons. Comparez avec la classe de l'espèce. Visualisez la classification obtenue. Vous pouvez vous aider des fonctions auxiliaires pour interpréter la classification. 
+
+```{r,eval=F}
+library(klaR)
+reskmodes<-kmodes(Data,4)
+table(reskmodes$cluster)
+```
+
+
+**Question :** Pour déterminer le nombre de classes, la méthode du coude peut être utilisée en remplaçant l'inertie intra-classe par le critère "Within Cluster Difference"
+
+$$
+WCD(K) = \underset{k=1}{\stackrel{K}{\sum}} \underset{i\in\mathcal C_k}{\sum}\ d(x_i,m_k)  
+$$
+
+où $d(.,.)$ est l'appariement simple et $m_k$ est le centre de la classe $\mathcal C_k$. 
+
+Tracez la courbe $K\mapsto WCD(K)$ pour déterminer le nombre de classes optimal. Vous pouvez vous aider des sorties de la fonction `kmodes()`. 
+
+
+```{r,eval=F}
+# A COMPLETER
+WithinDiff<-NULL
+Kmax<-10
+Clust<-matrix(0,nrow=nrow(Data),ncol=Kmax)
+for (k in 1:Kmax){
+  aux<-kmodes(Data,  k,iter.max = 100,weighted = FALSE)
+  WithinDiff<-c(WithinDiff,sum(aux$withindiff))
+  Clust[,k]<-aux$cluster
+}
+
+auxdf<-data.frame(NbCluster=1:Kmax,WithinDiff=WithinDiff)
+ggplot(auxdf,aes(x=NbCluster,y=WithinDiff))+geom_point()+
+  geom_line()
+
+```
+
+
+**Question : ** Reprenez les questions précédentes avec Python. 
+Vous pouvez utiliser la fonction `KModes`. 
+
+```{python,eval=F}
+from kmodes.kmodes import KModes
+
+cost = []
+for clustk in range(1, 10):
+  kmodes = KModes(n_jobs = -1, n_clusters = clustk, init ='Huang',random_state = 0)
+  kmodes.fit_predict(Datapy);
+  cost.append(kmodes.cost_);
+
+# A COMPLETER
+```
+
+
+
+
+# Méthodes des Kmeans sur coordonnées de l'ACM
+
+Une seconde stratégie est de partir des coordonnées de l'analyse des correspondances multiples et d'utiliser un algorithme plus usuel sur données quantitatives. Dans cette section, on va appliquer l'algorithme des Kmeans.  
+
+**Question :** Appliquez l'algorithme des Kmeans sur les coordonnées de l'ACM. Pour la détermination du nombre de classes, vous pouvez utiliser l'évolution de l'inertie intra-classe et le critère silhouette. 
+
+```{r,eval=F}
+# A COMPLETER
+reskmeans<-kmeans(resacm,4)
+table(reskmeans$cluster)
+```
+
+
+**Question :** Etudiez la classification retenue. Comparez avec la classification obtenue précédemment avec les Kmodes et la variable "Class" (champignon comestible ou toxique). 
+
+```{r,eval=F}
+# A COMPLETER
+```
+
+
+**Question :** Reprenez les questions précédentes avec Python. 
+
+```{python,eval=F}
+# A completer
+```
+
+
+# Méthode de classification hiérarchique
+
+**Question :** Quelle classification par CAH pouvez-vous mettre en place pour traiter des données qualitatives ? Mettez en application votre proposition avec R et étudiez la classification retenue. Vous pourrez vous aider des fonctions `daisy()` de la librairie `cluster`, de la fonction `hclust()`, ...
+
+```{r,eval=F}
+# A COMPLETER
+```
+
+
+**Question :** Reprenez la question avec python. Vous pouvez utiliser la librairie `gower`. 
+
+```{python,eval=F}
+import gower
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import dendrogram, linkage
+from sklearn.cluster import AgglomerativeClustering
+
+# A COMPLETER
+
+```
+
+# Méthode de classification par des mélanges
+
+Pour cette dernière partie du TP, nous allons utiliser une stratégie de classification via des modèles de mélange. Rappelons que l'on a pour données
+$\mathbf{X}=(x_1,\ldots,x_n)$ avec $x_i$ décrit par $p$ variables catégorielles, chacune avec $m_j$ modalités. Dans ce cas de variables qualitatives, on peut considérer des distributions multinomiales par variables et par composantes. Pour écrire la distribution de mélange, on commence par transformer l'écriture des données de la façon suivante :
+
+$$x_i=(x_{i1},\ldots,x_{ip})\rightsquigarrow (x_i^{jh}; j=1,\ldots,p, h=1,\ldots,m_j)$$
+avec
+$$
+  x_i^{\,jh}=\left\{\begin{array}{l l}1 & \textrm{ si } i \textrm{ prend la modalité } h  \textrm{ pour la variable }j\\
+                                      0 & \textrm{ sinon.}\end{array}\right.
+$$
+Les densités de mélange considérées sont de la forme 
+$$f(.|\theta_K)=\underset{k=1}{\stackrel{K}{\sum}}\pi_k f_k(x_i|\boldsymbol{\alpha}_k)$$ 
+avec
+
+  + $f_k(x_i|\boldsymbol{\alpha}_k)=\underset{j=1}{\stackrel{p}{\prod}}\underset{h=1}{\stackrel{m_j}{\prod}}\left(\alpha_k^{\,jh}\right)^{x_i^{jh}}$
+  + $\boldsymbol{\alpha}_k=(\alpha_k^{\,jh}; j=1,\ldots,p, h=1,\ldots,m_j)$ avec $\underset{h=1}{\stackrel{m_j}{\sum}}\alpha_k^{jh}=1$
+        \centerline{$\alpha_k^{\,jh}=$ proba. que la variable $j$ présente la modalité $h$ dans la classe $k$}
+  + $\theta_k=(\pi_1,\ldots,\pi_K,\boldsymbol{\alpha}_1,\ldots,\boldsymbol{\alpha}_K)$
+
+
+Classiquement, on reparamétrise par 
+
+- Pour chaque classe $k$ et chaque variable $j$
+$$(\alpha_k^{\ j1},\ldots,\alpha_k^{\ jm_j}) \rightarrow (a_k^{\ j1},\ldots,a_k^{\ jm_j},\varepsilon_k^{\ j1},\ldots,\varepsilon_k^{\ jm_j})$$
+avec
+$$
+a_k^{\ jh}=\left\{\begin{array}{l l}1 & \textrm{ si } h=\underset{h'=1,\ldots,m_j}{\mbox{argmax}}\ \alpha_k^{\ jh'}\\
+                                   0 & \textrm{sinon}\end{array}\right.
+$$
+($h$= modalité majoritaire pour variable $j$ dans classe $k$) et
+
+$$
+\varepsilon_{k}^{\ jh}=\left\{\begin{array}{l l}1 - \alpha_k^{\ jh} & \textrm{ si } a_k^{\ jh}=1\\
+                                   \alpha_k^{\ jh} & \textrm{ si } a_k^{\ jh}=0\end{array}\right.
+$$
+
+Par exemple $(0.3,0.6,0.1) \rightsquigarrow (0,1,0,\ \ 0.3,0.4,0.1)$\vspace*{0.2cm}
+
+La densité de mélange se réécrit alors
+    $$f(.|\theta_K)=\underset{k=1}{\stackrel{K}{\sum}}\pi_k \underset{j=1}{\stackrel{p}{\prod}}\underset{h=1}{\stackrel{m_j}{\prod}} \left[\left(1-\varepsilon_k^{\,jh}\right)^{a_k^{\ jh}} \left(\varepsilon_k^{\,jh}\right)^{1-a_k^{\ jh}}\right]^{x_i^{jh}}$$
+
+Selon les hypothèses faites sur les $\varepsilon_{k}^{\ jh}$ et sur les proportions du mélange, on a 10 formes possibles (dans le même esprit que les 24 formes des mélanges gaussiens, cf cours). 
+
+**Question :** A l'aide de la fonction `mixmodCluster` de la librairie `Rmixmod`, déterminez une classification des données par modèles de mélange. Vous étudierez en particulier les probabilités conditionnelles d'appartenance. 
+
+```{r,eval=F}
+library(Rmixmod)
+
+resmixmod<-mixmodCluster(
+  data = Data, nbCluster = 2:15, 
+  criterion = c("BIC", "ICL"),
+  model = mixmodMultinomialModel("Binary_pk_Ekjh")
+)
+
+# Graphe des critères de sélection
+K<-NULL
+BIC<-NULL
+ICL<-NULL
+for (k in 1:length(resmixmod@results)){
+  K<-c(K,resmixmod@results[[k]]@nbCluster)
+  BIC<-c(BIC,resmixmod@results[[k]]@criterionValue[1])
+  ICL<-c(ICL,resmixmod@results[[k]]@criterionValue[2])
+}
+
+## graphique à faire
+...
+
+
+# Etude de la classification retenue
+df<-data.frame(proba=apply(resmixmod@bestResult@proba,1,max),label=as.factor(apply(resmixmod@bestResult@proba,1,which.max)))
+ggplot(df,aes(x=label,y=proba))+geom_boxplot()
+table(resmixmod@bestResult@partition)
+## A completer
+
+# Comparaison avec les autres classifications
+## A completer
+```
+
+

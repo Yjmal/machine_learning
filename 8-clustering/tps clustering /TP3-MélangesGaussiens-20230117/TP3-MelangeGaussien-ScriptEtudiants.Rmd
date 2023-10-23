@@ -1,0 +1,384 @@
+---
+title: "TP Clustering"
+subtitle: "Partie 3 : Mélanges gaussiens"
+date : "4modIA / 2022-2023"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth : 4
+    number_sections : true
+header-includes:
+  - \usepackage{comment}
+params:
+  soln: TRUE   
+---
+
+```{css,echo=F}
+.badCode {
+background-color: #cfdefc; 
+}
+
+.corrO { background-color: rgb(255,238,237); }
+.corrS { background-color: pink; color: black; border: 1px solid red; }
+```
+
+```{r setup, echo=FALSE, cache=TRUE, message=F,warning=F}
+library(knitr)
+## Global options
+options(max.print="75")
+opts_chunk$set(echo=TRUE,
+	             cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               class.source="badCode")
+opts_knit$set(width=75)
+```
+
+L'objectif de ce TP est d'illustrer les notions abordées autour des modèles de mélanges gaussiens. 
+
+Les librairies R nécessaires pour ce TP : 
+
+```{r,echo=T, error=F,warning=F,message=F}
+## Pour faire le TP
+library(mclust)
+library(ggplot2)
+library(gridExtra)
+library(FactoMineR)
+library(factoextra)
+library(reticulate)
+library(reshape2)
+```
+
+Les librairies Python nécessaires pour ce TP : 
+
+```{python, echo=T,error=F,warning=F,eval=T}
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.mixture import GaussianMixture as GMM
+```
+
+
+
+
+# Application sur données simulées uni-dimensionnelles
+
+**Question : ** A l'aide du code suivant, simulez un jeu de données selon un mélange gaussien en $3$ composantes unidimensionnel. Faites varier les différents paramètres (proportions, moyennes et variances). 
+
+```{r, eval=F}
+a<- 3
+mu<-c(-a,0,a)
+b<- 5
+sigma<-c(b,0.5,b)
+prop<-c(1000,1000,1000)
+n<- 500
+X<-data.frame(X=c(rnorm(prop[1]*n,mu[1],sigma[1]),
+                  rnorm(prop[2]*n,mu[2],sigma[2]),
+                  rnorm(prop[3]*n,mu[3],sigma[3])))
+labeltrue<-c(rep(1,prop[1]*n),rep(2,prop[2]*n),rep(3,prop[3]*n))
+```
+
+```{r, eval=F}
+aux<-seq(-(a+4),a+4,0.01)
+Y<-data.frame(x=aux,
+              y1=(prop[1]*dnorm(aux,mu[1],sigma[1])), 
+              y2=(prop[2]*dnorm(aux,mu[2],sigma[2])),     
+              y3=(prop[3]*dnorm(aux,mu[3],sigma[3])))
+gvrai<-ggplot(X,aes(x=X))+
+  geom_histogram(aes(y = after_stat(density)),bins=100)+
+  geom_line(aes(x=x,y=y1),data=Y,col="red")+
+  geom_line(aes(x=x,y=y2),data=Y,col="blue")+
+  geom_line(aes(x=x,y=y3),data=Y,col="green")
+gvrai
+```
+
+
+
+
+**Question : ** Estimez les paramètres d'un mélange à $K=3$ classes à l'aide de la fonction `Mclust()` de la librairie `mclust`. Comparez la classification obtenue avec les vrais labels. 
+
+```{r,eval=F}
+# A completer
+res<-Mclust(X,G=3)
+res$parameters$pro
+res$parameters$mean[1]
+res$parameters$variance
+```
+
+
+
+**Question : ** Représentez la densité de mélange estimée sur l'histogramme de l'échantillon simulé. 
+
+```{r,eval=F}
+# A completer
+# dans y_k <- \pi_k \times \phi(x; \mu_k,\sigma_k^2)
+
+MelEstim<-data.frame(x=aux,
+                     y1=res$parameters$pro[1] * dnorm(aux,mean = res$parameters$mean[1], sd =res$parameters$variance$sigmasq[1]), 
+                     y2=res$parameters$pro[2] * dnorm(aux,mean = res$parameters$mean[2], sd =res$parameters$variance$sigmasq[2]),
+                     y3=res$parameters$pro[3] * dnorm(aux,mean = res$parameters$mean[3], sd =res$parameters$variance$sigmasq[3]))
+MelEstim<-data.frame(MelEstim,Somme=apply(MelEstim[,2:4],1,sum))
+
+gMelEst<-ggplot(X,aes(x=X))+
+  geom_histogram(aes(y = after_stat(density)),bins=100)+
+  geom_line(aes(x=x,y=y1),data=MelEstim,col="red")+
+  geom_line(aes(x=x,y=y2),data=MelEstim,col="blue")+
+  geom_line(aes(x=x,y=y3),data=MelEstim,col="green")+
+  geom_line(aes(x=x,y=Somme),data=MelEstim,col="cyan",linetype = "dashed",size=1.5)
+gMelEst
+```
+
+
+
+**Question : ** Calculez les probabilités a posteriori d'appartenance des individus à chacune des trois classes et tracez-les graphiquement.
+
+```{r,eval=F}
+# dans p, les proba a posteriori d'appartenance t_{11},\ldots,t_{n1},t_{12},\ldots,t_{n3}
+MelProba<-data.frame(x=rep(aux,3),
+                     p= c(..., ..., ..),    
+                     class=as.factor(rep(c(1,2,3),each=length(aux))))
+
+gprobapost<-ggplot(MelProba,aes(x=x,y=p,col=class))+geom_line()
+
+gprobapost
+```
+
+**Question : ** Tracez les boxplots des probabilités d'appartenance maximales par classe. Vous pouvez vous aider de la fonction `apply()`. 
+
+```{r,eval=F}
+df<-data.frame(lab=...,probamax=...)
+gprobamax<-ggplot(df,aes(x=lab,y=probamax))+geom_boxplot()
+grid.arrange(gvrai,gMelEst,gprobapost,gprobamax,ncol=2)
+```
+
+
+
+
+# Application sur des données simulées dans $\mathbb{R}^2$ 
+
+On va ici utiliser les données simulées "ex4.1" disponibles dans la librairie `mclust`. Ces données sont simulées selon un mélange de densités gaussiennes, proposées dans Baudry et al (2010). L'objectif est d'étudier l'impact du choix des formes des mélanges considérées et de la différence d'objectif entre les critères BIC et ICL. On va au travers de ce jeu de données simulées simple appréhender la manipulation des fonctions pour le clustering par mélanges gaussiens avec R et Python. 
+
+## Avec le logiciel R
+
+On commence ici par charger les données : 
+
+```{r}
+library(mclust)
+data(Baudry_etal_2010_JCGS_examples)
+Data<-ex4.1
+ggplot(Data,aes(x=X1,y=X2))+geom_point()
+```
+
+
+### Mélanges gaussiens diagonaux
+
+Dans cette section, on va considérer une collection de modèles de mélanges gaussiens avec un nombre de composantes $K$ variant entre $2$ et $10$ et des matrices de variance-covariance diagonales. 
+
+**Question  :** A l'aide de la fonction `Mclust()`, estimez les paramètres des mélanges gaussiens considérés. Vous pouvez consulter l'aide de la fonction `mclustModelNames()` pour le choix des formes des mélanges.
+
+```{r,eval=F}
+# A COMPLETER
+resBICdiag<-Mclust(Data,G = 4)
+```
+
+```{r,eval= F}
+resBICdiag$parameters$mean
+```
+
+**Question : ** A l'aide de la fonction `fviz_mclust_bic()`, visualisez le comportement du critère BIC sur la collection de modèles. Quel modèle est sélectionné ? Contrôlez à l'aide de `summary(resBICdiag)`. 
+
+```{r,eval=F}
+fviz_mclust(resBICdiag,what="BIC")
+summary(resBICdiag)
+```
+
+
+**Question :** Tracez la classification obtenue sur le nuage de points (vous pouvez utiliser la fonction `fviz_cluster()`). Comment est obtenue cette classification à partir du mélange gaussien retenu ? Quels sont les effectifs par classe ? Contrôlez les probabilités a posterori d'appartenance. 
+
+```{r,eval=F}
+# Visualisation du clustering
+fviz_cluster(resBICdiag)
+# Effectifs par classe
+table(resBICdiag$classification)
+# Boxplot des probabilités a posteriori maximales
+Aux<-data.frame(label=resBICdiag,    proba=...)
+ggplot(Aux,aes(x=label,y=proba))+geom_boxplot()
+```
+
+
+**Question :** Quel mélange gaussien est retenu avec le critère ICL ? Vous utiliserez la fonction `mclustICL()`. Etudiez la classification alors déduite. 
+
+```{r,eval=F}
+resICL<-mclustICL(Data)
+summary(resICL)
+```
+
+
+### Toutes les formes de mélanges gaussiens
+
+**Question : ** Reprenez les questions de la section précédente en considérant ici toutes les formes de mélanges gaussiens. Commentez. 
+
+```{r,eval=F}
+# A COMPLETER
+```
+
+## Avec le logiciel Python
+
+```{python}
+from sklearn.mixture import GaussianMixture as GMM
+Datapy=r.Data
+Datapy
+```
+
+Avec la fonction `GMM` de `sklearn.mixture` sous python, on n'a pas à notre disposition toutes les formes de mélanges gaussiens comme avec la librairie `mclust`. Quelles sont les formes disponibles ici ? 
+
+
+### Ajustement avec un mélange de forme diagonale
+
+Dans cette section, on va considérer un mélange gaussien avec un nombre de composantes $K$ variant entre $2$ et $20$ et des matrices de variance-covariance diagonales. 
+
+**Question  :** A l'aide de la fonction `GMM`, estimez les paramètres des mélanges gaussiens considérés. 
+
+```{python,eval=F}
+# A COMPLETER
+K_components = np.arange(1,10,1)
+models = [GMM(K, covariance_type='spherical', random_state=0).fit(Datapy) for K in K_components]
+```
+
+***Question : *** Visualisez le comportement des critères BIC et AIC sur la collection de modèles. Quel modèle est sélectionné par le critère BIC ? 
+
+```{python,eval=F}
+crit = pd.DataFrame({
+    "K" : np.arange(2, 21),
+    "BIC" : [m.bic(Datapy) for m in models], 
+    "AIC" : [m.aic(Datapy) for m in models],
+})
+critdf=pd.melt(crit, id_vars=['K'], value_vars=['BIC', 'AIC'])
+
+import plotly.express as px
+fig = px.line(critdf, x='K', y='value', color='variable')
+fig.show()
+```
+
+
+**Question :** Tracez la classification (obtenue à partir de la sélection par le critère BIC) sur le nuage de points. Quels sont les effectifs par classe ? Contrôlez les probabilités a posterori d'appartenance. 
+
+```{python,eval=F}
+# A COMPLETER
+
+# Modele retenu par BIC
+U=[m.bic(Datapy) for m in models]
+u=np.argmin(U)
+  #covariances = models[u].covariances_
+  #means = models[u].means_
+  #models[u].weights_
+
+probapost = models[u].predict_proba(Datapy)
+labels=models[u].fit_predict(Datapy)   
+probamax=[np.max(probapost[x,:]) for x in range(len(Datapy))]
+
+pd.crosstab(labels,"freq")
+```
+
+```{python,eval=F}
+# Classif sur le nuage de points
+df = pd.DataFrame({
+    "X" : Datapy.X1, 
+    "Y" : Datapy.X2,
+    "labels" : pd.Categorical(labels)
+})
+
+import plotly.express as px
+fig = px.scatter(df,x="X", y="Y", color="labels", symbol="labels")
+fig.show()
+
+# boxplot des probamax
+aux=pd.DataFrame({'probamax':probamax,'labels':labels},columns = ['probamax', 'labels'])
+
+import plotly.express as px
+fig = px.box(aux, x="labels", y="probamax")
+fig.show()
+```
+
+
+**Question :** Déterminez la valeur du critère ICL pour chaque modèle en compétition. Quel mélange gaussien est retenu avec le critère ICL ? Etudiez la classification alors déduite. 
+
+
+```{python,eval=F}
+# A COMPLETER
+# pour avoir ICL
+ICL = [m.bic(Datapy) - (2*sum(np.log( np.max(m.predict_proba(Datapy),1) ))) for m in models]
+crit=crit.assign(ICL=ICL)
+critdf=pd.melt(crit, id_vars=['K'], value_vars=['BIC', 'AIC','ICL'])
+
+...
+
+
+```
+
+
+### Ajustement avec un mélange gaussien de forme générale
+
+**Question :** Reprenez l'étude en considérant un mélange gaussien avec des matrices de variance-covarinaces totalement libres. Commentez. 
+
+```{python,eval=F}
+# A COMPLETER
+```
+
+
+# Etude des données de vins
+
+
+On reprend dans ce TP les données `wine` disponibles sur la page moodle du cours. 
+On charge ici les données.  
+
+```{r}
+wine<-read.table("wine.txt",header=T)
+wine$Qualite = as.factor(wine$Qualite)
+wine$Type = factor(wine$Type, labels = c("blanc", "rouge"))
+
+wineinit<-wine
+wine[,-c(1,2)]<-scale(wine[,-c(1,2)],center=T,scale=T)
+
+head(wine)
+```
+
+On fait une ACP pour la visualisation des résultats dans la suite
+
+```{r}
+resacp<-PCA(wine,quali.sup=c(1,2), scale.unit = TRUE,graph=FALSE)
+```
+
+Et on prépare aussi pour Python 
+
+```{python}
+winepy=r.wine
+winequant=winepy
+winequant=winequant.drop(columns=['Type','Qualite'])
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler();
+scaler.fit(winequant);
+winequant=scaler.transform(winequant)
+
+from sklearn.decomposition import PCA
+mypca = PCA(n_components=3);
+mypca.fit(winequant);
+dataPCA=mypca.fit_transform(winequant)
+```
+
+
+**Question :** Déterminez une classification de ces données à l'aide d'un modèle de mélange. Comparez votre résultat avec les classifications obtenues dans les TP précédents (avec Kmeans, CAH). 
+
+```{r,eval=F}
+# A FAIRE
+```
+
+

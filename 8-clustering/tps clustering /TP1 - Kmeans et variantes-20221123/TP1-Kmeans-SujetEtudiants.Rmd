@@ -1,0 +1,634 @@
+---
+title: "TP Clustering"
+subtitle: "Partie 1 : Kmeans, Kmedoid, fuzzy c-means sur données quantitatives"
+date : "4modIA / 2022-2023"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth : 4
+    number_sections : true
+header-includes:
+  - \usepackage{comment}
+params:
+  soln: TRUE   
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{css,echo=F}
+.badCode {
+background-color: #cfdefc;  
+}
+
+.corrO { background-color: rgb(255,238,237); }
+.corrS { background-color: pink; color: black; border: 1px solid red; }
+```
+
+```{r setup, echo=FALSE, cache=TRUE}
+library(knitr)
+## Global options
+options(max.print="75")
+opts_chunk$set(echo=TRUE,
+	             cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               class.source="badCode")
+opts_knit$set(width=75)
+```
+
+L'objectif de ce TP est d'illustrer les notions abordées dans le
+chapitre dédié aux algorithmes de clustering de type Kmeans. Les
+librairies R nécessaires pour ce TP :
+
+```{r,echo=T, error=F,warning=F}
+## Pour faire le TP
+library(mclust)
+library(cluster)
+library(factoextra)
+library(FactoMineR)
+library(ppclust)
+library(reticulate)
+library(ggplot2)
+library(reshape)
+library(corrplot)
+library(gridExtra)
+library(circlize)
+library(viridis)
+library(reshape2)
+```
+
+Les librairies Python nécessaires pour ce TP :
+
+```{python}
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+import plotly.express as px
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+from sklearn.metrics.cluster import adjusted_rand_score
+from sklearn.metrics import silhouette_samples, silhouette_score
+from sklearn_extra.cluster import KMedoids
+from sklearn.neighbors import NearestNeighbors
+```
+
+# Prise en main des données de vins
+
+## Lecture des données
+
+Dans ce TP, on va utiliser le jeu de données `wine` disponible sur la
+page moodle du cours.
+
+Ce jeu de données comprend des mesures physico-chimiques réalisées sur
+un échantillon de $n=600$ vins (rouges et blancs) du Portugal. Ces
+mesures sont complétées par une évaluation sensorielle de la qualité par
+un ensemble d'experts. Chaque vin est décrit par les variables suivantes
+:
+
+-   Qualite : son évaluation sensorielle par les experts
+    ("bad","medium","good"),
+-   Type : son type (1 pour un vin rouge, 0 pour un vin blanc),
+-   AcidVol : la teneur en acide volatile (en g/dm3 d'acide acétique),
+-   AcidCitr : la teneur en acide citrique (en g/dm3),
+-   SO2lbr : le dosage du dioxyde de soufre libre (en mg/dm3),
+-   SO2tot : le dosage du dioxyde de soufre total (en mg/dm3),
+-   Densite : la densité (en g/cm3),
+-   Alcool : le degré d'alcool (en % Vol.).
+
+**Question 1.** Récupérez sur moodle le jeu de données `wine.txt` et
+chargez-le sous R.
+
+```{r,eval=F}
+wine <-read.table('wine.txt')
+head(wine)
+str(wine)
+```
+
+Vérifiez la nature des variables à l'aide de la fonction `str()`.
+Modifiez si nécessaire les variables qualitatives (à l'aide de
+`as.factor()`) et transformez les modalités "1" et "0" de la variable
+`Type`en "rouge" et "blanc" respectivement (à l'aide de la fonction
+`factor()`).
+
+```{r,eval=F}
+wine$Qualite = as.factor(wine$Qualite)
+wine$Type = factor(wine$Type, labels = c("blanc", "rouge"))
+head(wine)
+```
+
+## Statistiques descriptives avec R
+
+**Question 2.** Faites quelques statistiques descriptives pour faire
+connaissance avec le jeu de données, avec des choix adaptés à la nature
+des variables. En particulier, étudiez les corrélations entre les
+variables quantitatives (fonction `corrplot()`) et faites une ACP
+(fonction `PCA()` de la librairie `factoMineR` et visualisation avec les
+fonctions `fviz_eig()`, `fviz_pca_ind()` et `fviz_pca_var()` de
+`factoextra`).
+
+```{r,eval=F}
+# A completer
+##variables qualitatives 
+levels(wine$Type)
+summary(wine$Type)
+EffType = as.vector(table(wine$Type))
+EffType
+
+##variables quantitatives
+corrplot(cor(wine[, -c(1:2)]), method = "ellipse")
+boxplot(wine[, -c(1:2)])
+
+###ACP
+
+acp <- PCA(wine[, -c(1:2)], scale.unit = TRUE, , graph = F)
+options(repr.plot.width = 4, repr.plot.height = 3)
+barplot(acp$eig[,1])
+
+boxplot(acp$ind$coord)
+
+acp$svd$V
+
+dimdesc(acp,axes = c(1,2))
+
+options(repr.plot.width = 5, repr.plot.height = 5)
+plot(acp)
+
+plot(acp, choix = "var")
+```
+
+**Question :** Pour la suite, on va utiliser les variables quantitatives
+pour faire de la classification non supervisée des vins. Les variables
+*Qualite* et *Type* seront utilisées comme des variables extérieures
+pour comparer / croiser avec les classifications obtenues pour
+l'interprétation.
+
+Pensez-vous qu'il est nécessaire de transformer les variables
+quantitatives dans l'objectif de clustering avec un algorithme des
+Kmeans ? Si oui, mettez en place cette transformation.
+
+```{r,eval=F}
+# A completer   ### il faut centrer réduire les données parce qu'on a un calcul de distances 
+```
+
+## Statistiques descriptives avec python
+
+Reprenez votre étude descriptive en python à l'aide des librairies
+`sklearn`, `matplotly`, `seaborn` et `plotly`.
+
+```{python}
+# A COMPLETER
+winepy=r.wine
+import matplotlib
+import plotly.express as px
+import matplotlib.pyplot as plt
+
+fig = px.box(winepy.select_dtypes(include=["float"]))
+
+
+fig.show()
+
+fig1 = px.violin(winepy.select_dtypes(include=["float"]))
+fig1.show()
+fig2 = px.bar(winepy.select_dtypes(include=["float"]))
+fig2.show()
+winequant=winepy
+winequant=winequant.drop(columns=['Type','Qualite'])
+winequant_corr= winequant.corr()
+winequant_corr
+fig3 = sns.heatmap(winequant.corr())
+fig3.show()
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler();
+scaler.fit(winequant);
+
+winequant=scaler.transform(winequant)
+winequant.head()
+```
+
+```{python, echo=T,error=F,warning=F,eval=F}
+```
+
+```{python}
+from sklearn.decomposition import PCA
+mypca = PCA()
+mypca.fit(winequant)
+print(mypca.explained_variance_ratio_.cumsum()) 
+dataPCA=mypca.fit_transform(winequant)
+
+pca_df = pd.DataFrame({
+    "Dim1" : dataPCA[:,0], 
+    "Dim2" : dataPCA[:,1],
+    "Type" : winepy["Type"],
+    "Qualite" : winepy["Qualite"]
+})
+
+fig4=px.scatter(pca_df,x="Dim1", y="Dim2", color="Type")
+
+
+fig4.show()
+```
+
+# Classification avec l'algorithme des Kmeans
+
+## A K=3 fixé
+
+### Avec le logiciel R
+
+**Question :** A l'aide de la fonction `kmeans()`, faites une
+classification non supervisée en 3 classes des vins. Regardez les
+options disponibles dans la fonction `kmeans()`.
+
+```{r,eval=F}
+help(kmeans)
+reskmeans<-kmeans(wine[,3:length(wine)],centers = 3)
+```
+
+**Question :** Combien a-ton de vins par classe ? Visualisez la
+classification obtenue dans les premiers plans de l'ACP (vous pouvez
+utiliser la fonction `PCA()` de la librairie `FactoMineR` et la fonction
+`fviz_cluster` de la librairie `factoextra`).
+
+```{r,eval=F}
+# A COMPLETER
+fviz_cluster(reskmeans,data=wine[,3:length(wine)],ellipse.type="norm",labelsize=8,geom=c("point"))+ggtitle("")
+```
+
+**Question :** La classification obtenue précédemment a-t-elle un lien
+avec le type de vins ? Avec la qualité du vin ? Vous pouvez vous aider
+de la fonction `table()` et la fonction `adjustedRandIndex()` de la
+librairie `mclust`.
+
+```{r,eval=F}
+# A COMPLETER
+table(reskmeans$cluster,wine$Type)
+```
+
+### Avec le logiciel python
+
+Reprenez les questions précédentes avec python.
+
+**Question :** Faites une classification en $K=3$ classes avec la
+méthode des K-means en vous aidant de `KMeans` de `sklearn.cluster`.
+Déterminez le nombre d'individus par classe à l'aide de la fonction
+`pd.crosstab(...,"freq")`.
+
+```{python,eval=F}
+# A COMPLETER
+from sklearn.cluster import KMeans
+kmeans = KMeans(3)
+kmeans.fit(winequant)
+
+pca_df = pd.DataFrame({
+    "Dim1" : dataPCA[:,0], 
+    "Dim2" : dataPCA[:,1],
+    "Type" : winepy["Type"],
+    "Qualite" : winepy["Qualite"],
+    "Kmeans3" : pd.Categorical(kmeans.labels_)     # A completer
+})
+
+fig6 = px.scatter(pca_df,x="Dim1", y="Dim2", color="Kmeans3", symbol="Kmeans3")
+fig6.show()
+
+pd.crosstab(..,"freq")   # A completer
+
+```
+
+**Question :** Comparez la classification obtenue avec les variables
+*Type* et *Qualité*. Vous pouvez vous aider de `crosstab` de `pandas` et
+`adjusted_rand_score` de `sklearn.metrics.cluster`.
+
+```{python, eval=F}
+# A COMPLETER
+from sklearn.metrics.cluster import adjusted_rand_score
+pd.crosstab(...)
+adjusted_rand_score(...)
+```
+
+## Choix du nombre de classes
+
+### Avec le logiciel R
+
+**Question :** On s'intéresse dans cette section au choix du nombre de
+classes $K$ en étudiant l'évolution de l'inertie intraclasse. En faisant
+varier $K$ entre 2 et 15, calculez l'inertie intraclasse associée à
+chaque classification obtenue. Tracez l'évolution de l'inertie
+intraclasse en fonction du nombre de classes. Qu'en concluez-vous ?
+
+```{r,eval=F}
+# A completer
+Kmax<-15
+reskmeanscl<-matrix(0,nrow=nrow(wine),ncol=Kmax-1)
+Iintra<-NULL
+for (k in 2:Kmax){
+  resaux<-kmeans(...)
+  reskmeanscl[,k-1]<-resaux$...
+  Iintra<-c(Iintra,resaux$...)
+}
+
+df<-data.frame(K=2:15,Iintra=Iintra)
+ggplot(df,aes(x=K,y=Iintra))+geom_line()+geom_point()+xlab("Nombre de classes")+ylab("Inertie intraclasse")
+```
+
+**Question :** Reprendre la question du choix du nombre de classes en
+utilisant le critère silhouette (vous pouvez vous aider de la fonction
+`silhouette()`). Pour la classification sélectionnée, représentez les
+poids $s(i)$ de chaque individu à l'aide de la fonction
+`fviz_silhouette()`.
+
+```{r, eval=F}
+# A COMPLETER
+Silhou<-NULL
+for (k in 2:Kmax){
+   aux<-silhouette(...)
+   Silhou<-c(Silhou,mean(aux[,3]))
+}
+
+df<-data.frame(K=2:Kmax,Silhouette=Silhou)
+ggplot(df,aes(x=K,y=Silhouette))+
+  geom_point()+
+  geom_line()+theme(legend.position = "bottom")
+
+aux<-silhouette(...)
+fviz_silhouette(aux)+theme(plot.title = element_text(size =9))
+rm(df,Silhou,aux)
+```
+
+### Avec le logiciel Python
+
+**Question :** Tracez l'évolution de l'inertie intraclasse en fonction
+du nombre de classes variant entre $2$ et $15$. Qu'en concluez-vous ?
+
+```{python, eval=F}
+# A completer
+InertieIntra = []
+for k in ..........:
+  kmeans = KMeans(...........);
+  kmeans.fit(..........);
+  InertieIntra.append(.........);
+  
+aux = pd.DataFrame({"K" : .......,
+                    "InertieIntra" : ........})
+fig = px.line(aux, x='K', y='InertieIntra',labels={'x':'Number of clusters', 'y':'Inertie Intra'},markers=True)
+fig.show()   
+```
+
+**Question :** Reprendre la question du choix du nombre de classes en
+utilisant le critère silhouette (vous pouvez vous aider de
+`silhouette_score` de la librairie `scikit-learn`). Pour la
+classification sélectionnée, représentez les poids $s(i)$ de chaque
+individu à l'aide de la fonction `SilhouetteVisualizer` de la librairie
+`yellowbrick`.
+
+```{python, eval=F}
+# COMPLETER
+from sklearn.metrics import silhouette_score
+
+silhouette_coefficients = []
+for k in ........:
+  kmeans = KMeans(.....);
+  kmeans.fit(winequant);
+  score = silhouette_score(.....);
+  silhouette_coefficients.append(score);
+  
+aux = pd.DataFrame({"K" : ......,
+                    "Silhouette" : ........})
+fig = px.line(aux, x='K', y='Silhouette',labels={'x':'Number of clusters', 'y':'Silhouette'},markers=True)
+fig.show()     
+```
+
+```{python, eval=F}
+# A COMPLETER
+from yellowbrick.cluster import SilhouetteVisualizer
+model = KMeans(....);
+visualizer = SilhouetteVisualizer(model, colors='yellowbrick')
+visualizer.fit(winequant)     
+visualizer.show()        
+```
+
+# Classification avec l'algorithme PAM
+
+## Avec R
+
+**Question :** Déterminez une classificaiotn en $K=3$ classes des vins
+en utilisant la méthode PAM (fonction `pam()` de la librairie `cluster`)
+et représentez graphiquement la classification obtenue. A-t-elle un lien
+avec le type de vins ? Avec la qualité ? Avec la classification en $K=3$
+classes obtenue avec la méthode des Kmeans?
+
+```{r,eval=F}
+# A COMPLETER
+resPAM<-pam(......)
+resPAM$medoids
+resPAM$id.med
+
+fviz_cluster(resPAM,data=wine[,-c(1,2)],ellipse.type="norm",labelsize=8,geom=c("point"))+ggtitle("")
+fviz_pca_ind(resacp,col.ind=as.factor(resPAM$clustering),geom = c("point"),axes=c(1,2))
+
+adjustedRandIndex(......)
+table(.......)
+```
+
+**Question :** Déterminez le nombre de classes optimal par le critère
+Silhouette pour $K$ variant entre 2 et 15 avec l'algorithme PAM.
+Commentez la classification retenue. Est-elle proche de celle obtenue
+avec l'algorithme des Kmeans ?
+
+```{r,eval=F}
+# A completer
+Kmax<-15
+resPAMcl<-matrix(0,nrow=nrow(wine),ncol=Kmax-1)
+Silhou<-NULL
+for (k in 2:Kmax){
+  resaux<-pam(.....)
+  resPAMcl[,k-1]<-resaux$clustering
+  aux<-silhouette(resPAMcl[,k-1], daisy(wine[,-c(1,2)]))
+  Silhou<-c(Silhou,......)
+}
+
+df<-data.frame(K=2:Kmax,Silhouette=Silhou)
+ggplot(df,aes(x=K,y=Silhouette))+
+  geom_point()+
+  geom_line()+theme(legend.position = "bottom")
+
+
+aux<-silhouette(resPAMcl[,1], daisy(wine[,-c(1:2)]))
+fviz_silhouette(aux)+theme(plot.title = element_text(size =9))
+
+adjustedRandIndex(.....)
+table(.....)
+```
+
+## Avec Python
+
+**Question :** Déterminez une classificaiotn en $K=3$ classes des vins
+en utilisant la méthode des K-médoides et représentez graphiquement la
+classification obtenue. A-t-elle un lien avec le type de vins ? Avec la
+qualité ? Avec la classification en $K=3$ classes obtenue avec la
+méthode des Kmeans?
+
+```{python,eval=F}
+# A COMPLETER
+from sklearn_extra.cluster import KMedoids
+KMed = KMedoids(.....).fit(.....)
+KMed.cluster_centers_
+KMed.medoid_indices_
+
+pca_df = pd.DataFrame({
+    "Dim1" : dataPCA[:,0], 
+    "Dim2" : dataPCA[:,1],
+    "Type" : winepy["Type"],
+    "Qualite" : winepy["Qualite"],
+    "Kmed3" : pd.Categorical(KMed.labels_)
+})
+
+fig=px.scatter(pca_df,x="Dim1",y="Dim2",color="Kmed3",symbol="Kmed3")
+fig.show()
+```
+
+**Question :** Déterminez le nombre de classes optimal par le critère
+Silhouette pour $K$ variant entre 2 et 15. Commentez la classification
+retenue. Est-elle proche de celle obtenue avec l'algorithme des Kmeans ?
+
+```{python,eval=F}
+# A COMPLETER
+silhouette_coefficients = []
+for k in range(2, 16):
+  Kmed = KMedoids(......).fit(.....)
+  score = silhouette_score(.......);
+  silhouette_coefficients.append(score);
+  
+aux = pd.DataFrame({"K" : range(2, 16),
+                    "Silhouette" : silhouette_coefficients})
+fig = px.line(aux, x='K', y='Silhouette',labels={'x':'Number of clusters', 'y':'Silhouette'},markers=True)
+fig.show()  
+
+Kmedopt = KMedoids(......)
+visualizer = SilhouetteVisualizer(Kmedopt, colors='yellowbrick')
+visualizer.fit(winequant);     
+visualizer.show()    
+```
+
+# Classification avec l'algorithme fuzzy c-means
+
+## Présentation
+
+Avec les algorithmes de clustering précédents (Kmeans, PAM) nous
+obtenons une classification "dure" au sens que chaque individu ne peut
+appartenir qu'à une seule classe et chaque individu participe avec le
+même poids à la construction des classes. Une classification dure
+$\mathcal{P}_K=\{\mathcal{C}_1,\ldots,\mathcal{C}_K\}$ peut se traduire
+en une matrice $Z=(z_{ik})_{\underset{1\leq k \leq K}{1\leq i \leq n}}$
+avec $z_{ik}=1$ si $i\in\mathcal{C}_k$ et 0 sinon. Dans cette section,
+nous allons nous intéresser à une adaptation de l'algorithme des Kmeans,
+appelée *fuzzy c-means*. L'idée est de retourner une classification
+*fuzzy* c'est-à-dire une matrice
+$W=(\omega_{ik})_{\underset{1\leq k \leq K}{1\leq i \leq n}}$ avec
+$\forall i,\ k,\ \omega_{ik}\geq 0$ et
+$\forall i,\ \underset{k=1}{\stackrel{K}{\sum}} \omega_{ik}=1$. On donne
+ainsi plutôt un poids $\omega_{ik}$ que l'individu $i$ appartienne à la
+classe $\mathcal{C}_k$.
+
+L'algorithme fuzzy c-means a pour fonction objective
+
+$$
+\underset{W,\{m_1,\ldots,m_K\}}{\mbox{argmin}}\ \underset{i=1}{\stackrel{n}{\sum}}\underset{k=1}{\stackrel{K}{\sum}} (\omega_{ik})^\gamma\ \|x_i - m_k\|^2
+$$ où $X=(x_1,\ldots,x_n)'$ est la matrice des données,
+$\gamma\in[1,+\infty[$, $m_k$ est le centre de la classe
+$\mathcal{C}_k$.
+
+Dans le même principe que l'algorithme des Kmeans, l'algorithme fuzzy
+c-means est un algorithme itératif :
+
+-   Step 1: Initialisation des poids $W^{(0)}$
+-   Step 2: A l'itération $r$, on calcule les centres des classes
+
+$$
+m_k^{(r)} = \frac{\underset{i=1}{\stackrel{n}{\sum}} (\omega_{ik}^{(r-1)})^\gamma x_i}{\underset{i=1}{\stackrel{n}{\sum}} (\omega_{ik}^{(r-1)})^\gamma}
+$$
+
+-   Step 3: Mise à jour des poids ($\gamma>1$) $$
+    \omega_{ik}^{(r)} = \left[\underset{\ell=1}{\stackrel{K}{\sum}} \left(\frac{\|x_i - m_k^{(r)}\|^2}{\|x_i - m_\ell^{(r)}\|^2}\right)^{\frac{1}{\gamma-1}}  \right]^{-1}
+    $$
+
+-   Step 4: Si $\|W^{(r)} - W^{(r-1)}\|<$ seuil, on s'arrête, sinon on
+    retourne à l'étape 2.
+
+En général, la puissance choisie sur les poids est $\gamma=2$. Dans le
+cas $\gamma=1$, on retrouve l'algorithme des Kmeans.
+
+## Avec le logiciel R
+
+Nous allons ici nous appuyer sur la fonction `fcm()` de la librairie
+`ppclust`.
+
+**Question :** Utilisez cet algorithme pour obtenir une classification
+en $3$ classes. Comment sont initialisés les poids ? Comment est obtenue
+la classification finale ? A l'aide des poids, étudiez la stabilité des
+classes. Vous pouvez pour cela étudier les poids des individus par
+classe.
+
+```{r,eval=F}
+# A COMPLETER
+library(ppclust)
+resfcm<-fcm(...)
+```
+
+**Question :** Représentez la classification obtenue sur le premier plan
+de l'ACP en nuançant selon les poids.
+
+```{r,eval=F}
+# A COMPLETER
+fviz_pca_ind(resacp,axes=c(1,2),geom=c("point"),col.ind=apply(....................))+
+scale_color_gradient2(low="white", mid="blue",high="red", midpoint=0.8, space = "Lab")
+```
+
+**Question** : Comparez les classifications obtenues avec Kmeans et
+fuzzy c-means. Commentez.
+
+```{r,eval=F}
+# A COMPLETER
+```
+
+## Avec le logiciel python
+
+Reprenez les questions de la partie précédente avec le logiciel python.
+Vous pouvez utiliser la fonction `FCM`de la librairie `fcmeans`.
+
+```{python,eval=F}
+# A COMPLETER
+from fcmeans import FCM
+fcmmodel=FCM(...)
+fcmmodel.fit(...)
+
+centers = fcmmodel.centers
+labels = fcmmodel.predict(...)
+poids=fcmmodel.u
+
+import numpy as np
+df=pd.DataFrame({'label':list(map(str,labels)), 'probamax':np.amax(poids, axis=1)})
+fig=px.box(df,x='label',y='probamax')
+fig.show()
+
+# Plot dans le premier plan factoriel
+pca_df = pd.DataFrame({
+    "Dim1" : dataPCA[:,0], 
+    "Dim2" : dataPCA[:,1],
+    "fcmeans" : pd.Categorical(df.label),
+    "probamax" : df.probamax
+})
+
+fig=px.scatter(pca_df,x="Dim1", y="Dim2", color= ........)
+fig.show()
+
+# Comparaison avec les Kmeans 
+....
+
+```

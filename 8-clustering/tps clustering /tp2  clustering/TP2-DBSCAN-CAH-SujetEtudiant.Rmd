@@ -1,0 +1,421 @@
+---
+title: "TP Clustering"
+subtitle: "Partie 2 : DBSCAN et CAH sur données quantitatives"
+date : "4modIA / 2022-2023"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth : 4
+    number_sections : true
+header-includes:
+  - \usepackage{comment}
+params:
+  soln: TRUE   
+---
+
+```{css,echo=F}
+.badCode {
+background-color: #cfdefc; 
+}
+
+.corrO { background-color: rgb(255,238,237); }
+.corrS { background-color: pink; color: black; border: 1px solid red; }
+```
+
+```{r setup, echo=FALSE, cache=TRUE, message=F,warning=F}
+library(knitr)
+## Global options
+options(max.print="75")
+opts_chunk$set(echo=TRUE,
+	             cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               class.source="badCode")
+opts_knit$set(width=75)
+```
+
+L'objectif de ce TP est d'illustrer les notions abordées pour la méthode DBSCAN et pour la clasisifcation hiérarchique. 
+Les librairies R nécessaires pour ce TP : 
+
+```{r,echo=T, error=F,warning=F,message=F}
+## Pour faire le TP
+library(mclust)
+library(cluster)
+library(clusterSim)
+library(factoextra)
+library(FactoMineR)
+library(reticulate)
+library(ggplot2)
+library(reshape2)
+library(circlize)
+library(viridis)
+```
+
+Les librairies Python nécessaires pour ce TP : 
+
+```{python, echo=T,error=F,warning=F,eval=T}
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+from sklearn.cluster import DBSCAN
+from sklearn.metrics.cluster import adjusted_rand_score
+from sklearn.metrics import silhouette_samples, silhouette_score
+from sklearn.neighbors import NearestNeighbors
+from scipy.cluster.hierarchy import dendrogram, linkage
+from sklearn.cluster import AgglomerativeClustering
+from yellowbrick.cluster import KElbowVisualizer
+from sklearn.cluster import KMeans
+```
+
+
+On reprend dans ce second TP les données `wine` disponibles sur la page moodle du cours. 
+On charge ici les données.  
+
+```{r}
+wine<-read.table("wine.txt",header=T)
+wine$Qualite = as.factor(wine$Qualite)
+wine$Type = factor(wine$Type, labels = c("blanc", "rouge"))
+
+wineinit<-wine
+wine[,-c(1,2)]<-scale(wine[,-c(1,2)],center=T,scale=T)
+
+head(wine)
+```
+
+On fait une ACP pour la visualisation des résultats dans la suite
+
+```{r}
+resacp<-PCA(wine,quali.sup=c(1,2), scale.unit = TRUE,graph=FALSE)
+```
+
+Et on prépare aussi pour Python 
+
+```{python}
+winepy=r.wine
+winequant=winepy
+winequant=winequant.drop(columns=['Type','Qualite'])
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler();
+scaler.fit(winequant);
+winequant=scaler.transform(winequant)
+
+from sklearn.decomposition import PCA
+mypca = PCA(n_components=3);
+mypca.fit(winequant);
+dataPCA=mypca.fit_transform(winequant)
+```
+
+
+# Classification avec DBSCAN
+
+## Avec le logiciel R
+
+**Question :** Dans un premier temps, utilisez l'algorithme DBSCAN avec les paramètres `minPts=` 7 et `eps=` 1 à l'aide de la fonction `dbscan()` de la librairie `dbscan`. Quels sont les effectifs par classe ? Combien d'individus ne sont pas classés ? 
+
+```{r,eval=F}
+# A COMPLETER
+minPts<-7
+eps<-1
+res.db <- dbscan::dbscan(...)
+table(...)
+```
+
+```{r,eval=F}
+fviz_cluster(res.db, wine[,-c(1:2)], geom="point",ellipse="FALSE")+
+  theme(legend.position="none")+
+  xlab("")+ylab("")+ggtitle("Avec DBSCAN")
+```
+
+
+
+
+**Question :** Pour étudier l'influence des paramètres `minPts` et `eps`, évaluez le nombre de classes obtenues et le nombre d'individus non classés pour différentes valeurs de ces paramètres.  
+
+```{r,eval=F}
+minPts <- ...
+eps <- ...
+NBCluster <- matrix(0,nrow=length(minPts),ncol=length(eps))
+NBNonCl <-matrix(0,nrow=length(minPts),ncol=length(eps))
+for (i in 1:length(minPts)){
+  for (j in 1:length(eps)){
+    res<-dbscan::dbscan(wine[,-c(1,2)], eps=eps[j], minPts=minPts[i])
+    NBCluster[i,j] <- ...
+    NBNonCl[i,j] <- ...
+  }
+}
+
+df<-data.frame(eps=rep(eps,each=length(minPts)),
+              minPts=as.factor(rep(minPts,length(eps))),
+              NBCluster=c(NBCluster),
+              NBNonCl=c(NBNonCl)*100/nrow(wine))
+
+ggplot(df,aes(x=eps,y=NBCluster,col=minPts))+geom_point()+geom_line()
+ggplot(df,aes(x=eps,y=NBNonCl,col=minPts))+geom_point()+geom_line()
+```
+
+
+**Question :** Pour une valeur de `minPts=7`, tracez le graphe de distance kNN afin de choisir le paramètre `eps`. Vous pouvez utiliser la fonction `kNNdistplot()`. Qu'en pensez-vous ?
+
+```{r,eval=F}
+# A COMPLETER
+```
+
+
+## Avec le logiciel Python
+
+**Question :** Dans un premier temps, utilisez l’algorithme DBSCAN avec les paramètres minPts= 7 et eps= 1 à l’aide de la fonction `DBSCAN` de la librairie `scikit-learn`. Quels sont les effectifs par classe ? Combien d’individus ne sont pas classés ?
+
+```{python,eval=F}
+# A COMPLETER
+from sklearn.cluster import DBSCAN
+dbsc = DBSCAN(....).fit(....)
+pd.crosstab(....,"freq")
+
+import seaborn as sns
+import pandas as pd
+pca_df = pd.DataFrame({
+    "Dim1" : dataPCA[:,0], 
+    "Dim2" : dataPCA[:,1],
+    "DBSCAN" : dbsc.labels_
+})
+sns.lmplot( x="Dim1", y="Dim2", data=pca_df, fit_reg=False, hue='DBSCAN', legend=True);
+plt.show()
+```
+
+
+**Question :** Pour étudier l’influence des paramètres minPts et eps, évaluez le nombre de classes obtenues et le nombre d’individus non classés pour différentes valeurs de ces paramètres.
+
+```{python,eval=F}
+# A COMPLETER
+
+epsvalue= ...
+minPtsvalue=...
+NBCluster = np.zeros((minPtsvalue.size,epsvalue.size))
+NBNonCl=np.zeros((minPtsvalue.size,epsvalue.size))
+
+for i in np.arange(0,minPtsvalue.size,1):
+  for j in np.arange(0,epsvalue.size,1):
+    resdbsc = DBSCAN(eps=...,min_samples=...).fit(...)
+    NBCluster[i,j] = ...
+    NBNonCl[i,j] = ...
+    
+# 
+plt.plot(epsvalue,NBCluster[0,:], label='minPts=5', color='green')
+plt.plot(epsvalue,NBCluster[4,:], label='minPts=9', color='steelblue')
+plt.plot(epsvalue,NBCluster[7,:], label='minPts=12', color='purple')
+plt.plot(epsvalue,NBCluster[10,:], label='minPts=15', color='red')
+plt.legend()
+plt.show()
+plt.close()
+
+#    
+plt.plot(epsvalue,NBNonCl[0,:], label='minPts=5', color='green')
+plt.plot(epsvalue,NBNonCl[4,:], label='minPts=9', color='steelblue')
+plt.plot(epsvalue,NBNonCl[7,:], label='minPts=12', color='purple')
+plt.plot(epsvalue,NBNonCl[10,:], label='minPts=15', color='red')
+plt.legend()
+plt.show()
+
+```
+
+
+
+**Question :** Pour une valeur de `minPts=7`, tracez le graphe de distance kNN afin de choisir le paramètre `eps`. Qu'en pensez-vous ?
+
+```{python,eval=F}
+# A COMPLETER
+import numpy as np
+from sklearn.neighbors import NearestNeighbors
+neighbors = NearestNeighbors(.....)
+neighbors_fit = neighbors.fit(.....)
+distances, indices = neighbors_fit.kneighbors(......)
+distancesmean = np.sort(distances.sum(axis=1)/6,axis=0)
+
+plt.plot(distancesmean)
+plt.axhline(y=....., linewidth=1, linestyle='dashed', color='k')
+plt.ylabel("k-NN distance")
+plt.xlabel("Points sorted by distanc)")
+plt.show()
+
+dbscopt = DBSCAN(eps=...., min_samples=....).fit(winequant)
+pd.crosstab(dbscopt.labels_,"freq")
+```
+
+
+# Classification hiérarchique
+
+Dans cette section, nous nous intéressons à la classification hiérarchique que nous allons étudier avec R et python également. 
+
+## Avec le logiciel R
+
+**Question **: A l'aide de la fonction `hclust`, faites une classification hiérarchique des données de vins avec les mesures d'agrégation `single`, `complete` et `average` respectivement. Comparez visuellement les dendrogrammes associés. Commentez. 
+
+```{r,eval=F}
+# A COMPLETER
+hclustsingle<-hclust(...)
+hclustcomplete<-hclust(...)
+hclustaverage<-hclust(...)
+
+# Dendrogramme
+plot(hclustsingle,hang=-1,labels=FALSE)
+.....
+
+fviz_dend(hclustsingle,show_labels=FALSE)
+.....
+
+```
+
+**Question :** Déduisez du dendrogramme avec la mesure d'agrégation `complete` une classification en 3 classes. Vous pouvez utiliser la fonction `cutree()`. Comparez-la avec les variables *Qualité* et *Type*. Commentez.  
+
+```{r,eval=F}
+# A COMPLETER
+```
+
+
+**Question : ** Tracez la distribution des variables quantitatives de `wine` en fonction de la classification en 3 classes de la question précédente. Commentez. 
+
+```{r,eval=F}
+df<-data.frame(wine[,-c(1,2)],Class=as.factor(ClassK3))
+df<-melt(df,id="Class")
+ggplot(df,aes(x=variable,y=value))+geom_violin(aes(fill=Class))
+```
+
+
+
+
+**Question :** Dans cette question et pour les suivantes, on se focalise sur la mesure d'agrégation de Ward. Ajustez une classification hiérarchique avec la mesure de Ward. Que représentent les hauteurs du dendrogramme dans ce cas ? 
+
+```{r,eval=F}
+# A COMPLETER
+hward<-hclust(...)
+fviz_dend(hward,show_labels=FALSE)
+```
+
+
+
+
+**Question : ** Déterminez le nombre de classes à retenir avec l'indice de Calinski_Harabasz. Vous pouvez vous aider de la fonction `ìndex.G1()` de la librairie `clusterSim`. Tracez la classification obtenue sur le dendrogramme et sur le premier plan factorielde l'ACP. 
+
+```{r,eval=F}
+# A completer
+ClustCH<-cutree(hward,....)
+fviz_dend(hward,show_labels=FALSE,k=which.max(CH)+1)
+fviz_pca_ind(resacp,geom = c("point"),habillage=as.factor(ClustCH))
+```
+
+
+
+**Question : ** Déterminez le nombre de classes à retenir avec le critère Silhouette. Vous pouvez vous aider de la fonction `ìndex.S()`  de la librairie `clusterSim`. Comparez avec la classification de la question précédente. 
+
+```{r,eval=F}
+# A COMPLETER
+```
+
+
+
+**Question :** Comparez la classification obtenue avec la méthode des Kmeans dans le TP 1 et celle obtenue à la question précédente. 
+
+```{r,eval=F}
+# A COMPLETER
+```
+
+
+
+
+## Avec le logiciel python
+
+**Question **: A l'aide de la fonction `linkage`, faites une classification hiérarchique des données de vins avec les mesures d'agrégation `single`, `complete` et `average` respectivement. Comparez visuellement les dendrogrammes associés. Commentez. 
+
+```{python,eval=F}
+# A COMPLETER
+from scipy.cluster.hierarchy import dendrogram, linkage
+hsingle=linkage(...)
+hcomplete=linkage(...)
+haverage=linkage(...)
+
+dendrogram(....,no_labels=True,color_threshold=0);
+plt.show()
+```
+
+
+
+**Question :** Déterminez une classification en 3 classes avec la mesure d'agrégation `complete`. Comparez-la avec les variables *Qualité* et *Type*. Commentez.  
+
+```{python,eval=F}
+# A COMPLETER
+from sklearn.cluster import AgglomerativeClustering
+hierarchical_cluster = AgglomerativeClustering(.....)
+ClustK3 = hierarchical_cluster.fit_predict(winequant)
+# Comparer avec Qualite et Type
+.....
+
+```
+
+
+
+**Question : ** Tracez la distribution des variables quantitatives de `wine` en fonction de la classification en 3 classes de la question précédente. Commentez. 
+
+```{python,eval=F}
+import seaborn as sns
+sns.set_style("whitegrid")
+aux=winepy.assign(Clust=ClustK3)
+del aux["Qualite"]
+del aux["Type"]
+sm = aux.melt(id_vars='Clust')
+sns.catplot(kind='box', data=sm, x='Clust', y='value', col='variable', col_wrap=3, height=4)
+plt.show()
+plt.close()
+```
+
+
+
+
+**Question :** Dans cette question et pour les suivantes, on se focalise sur la mesure d'agrégation de Ward. Ajustez une classification hiérarchique avec la mesure de Ward. Que représentent les hauteurs du dendrogramme dans ce cas ? 
+
+```{python,eval=F}
+# A COMPLETER
+
+```
+
+
+
+
+**Question : ** Déterminez le nombre de classes à retenir avec l'indice de Calinski-Harabasz. Vous pouvez vous aider de la fonction `KElbowVisualizer` de la librairie `yellowbrick`. Tracez la classification obtenue sur le premier plan factoriel de l'ACP. 
+
+```{python,eval=F}
+from yellowbrick.cluster import KElbowVisualizer
+model = AgglomerativeClustering()
+visualizer = KElbowVisualizer(......);
+visualizer.fit(winequant)
+visualizer.show()
+```
+
+
+
+**Question : ** Déterminez le nombre de classes à retenir avec le critère Silhouette. Vous pouvez vous aider de la fonction `KElbowVisualizer`  de la librairie `yellowbrick`. Comparez avec la classification de la question précédente. 
+
+```{python,eval=F}
+# A COMPLETER
+```
+
+
+
+**Question :** Comparez la classification obtenue avec la méthode des Kmeans dans le TP 1 et celle obtenue à la question précédente. 
+
+```{python,eval=F}
+# A COMPLETER
+```
+
+
+
+
+
+
+
+
